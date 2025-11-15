@@ -8,16 +8,16 @@ use Phpro\SoapClient\Soap\CodeGeneratorEngineFactory;
 
 return Config::create()
     ->setEngine($engine = CodeGeneratorEngineFactory::create(
-        'https://service.smartdonusum.com/InvoiceService/InvoiceWS?wsdl'
+        'https://service.smartdonusum.com/EArchiveInvoiceService/EArchiveInvoiceWS?wsdl'
     ))
-    ->setTypeDestination('src/Type')
-    ->setTypeNamespace('SmartDonusum\Type')
-    ->setClientDestination('src')
-    ->setClientName('SmartDonusumClient')
-    ->setClientNamespace('SmartDonusum')
-    ->setClassMapDestination('src')
-    ->setClassMapName('SmartDonusumClassmap')
-    ->setClassMapNamespace('SmartDonusum')
+    ->setTypeDestination('src/EArchive/Type')
+    ->setTypeNamespace('SmartDonusum\EArchive\Type')
+    ->setClientDestination('src/EArchive')
+    ->setClientName('EArchiveClient')
+    ->setClientNamespace('SmartDonusum\EArchive')
+    ->setClassMapDestination('src/EArchive')
+    ->setClassMapName('EArchiveClassmap')
+    ->setClassMapNamespace('SmartDonusum\EArchive')
     ->addRule(new Rules\AssembleRule(new Assembler\GetterAssembler(new Assembler\GetterAssemblerOptions())))
     ->addRule(new Rules\AssembleRule(new Assembler\ImmutableSetterAssembler(
         new Assembler\ImmutableSetterAssemblerOptions()
