@@ -1,4 +1,15 @@
 {
+    "name": "tnhnclskn/smartdonusum",
+    "description": "SmartDonusum API Client",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Tunahan Caliskan",
+            "email": "mail@tunahancaliskan.com"
+        }
+    ],
+    "minimum-stability": "stable",
     "require": {
         "symfony/http-client": "^7.3",
         "nyholm/psr7": "^1.8",
