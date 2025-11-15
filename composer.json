@@ -1,0 +1,17 @@
+{
+    "require": {
+        "symfony/http-client": "^7.3",
+        "nyholm/psr7": "^1.8",
+        "phpro/soap-client": "^3.4"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "SmartDonusum\\": "src/"
+        }
+    }
+}
