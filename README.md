@@ -73,13 +73,27 @@ SmartDonusum platformu farklı işlemler için ayrı servisler sunar:
 
 require 'vendor/autoload.php';
 
-use SmartDonusum\SmartDonusumClientFactory;
-use SmartDonusum\Type\SendInvoice;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EInvoice\EInvoiceClient;
+use SmartDonusum\EInvoice\EInvoiceClassmap;
+use SmartDonusum\EInvoice\Type\SendInvoice;
+use SmartDonusum\EInvoice\Type\InputDocument;
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
-// Client'ı oluştur
+// E-Fatura Client'ı oluştur
 $wsdl = 'https://servis.smartdonusum.com/InvoiceService/InvoiceWS?wsdl';
-$client = SmartDonusumClientFactory::factory($wsdl);
+
+$engine = DefaultEngineFactory::create(
+    ExtSoapOptions::defaults($wsdl, [])
+        ->withClassMap(EInvoiceClassmap::getCollection())
+);
+
+$eventDispatcher = new EventDispatcher();
+$caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+$client = new EInvoiceClient($caller);
 
 // Fatura gönder
 $inputDocument = new InputDocument(
@@ -105,36 +119,36 @@ foreach ($response as $entResponse) {
 
 ### HTTP Authentication Ekleme
 
-SmartDonusum servisleri HTTP Basic Authentication gerektirir. Symfony HTTP Client ile authentication eklemek için:
+SmartDonusum servisleri HTTP Basic Authentication gerektirir:
 
 ```php
-use Symfony\Component\HttpClient\HttpClient;
+use SmartDonusum\EInvoice\EInvoiceClient;
+use SmartDonusum\EInvoice\EInvoiceClassmap;
 use Phpro\SoapClient\Soap\DefaultEngineFactory;
 use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
-// HTTP Client with authentication
-$httpClient = HttpClient::create([
-    'auth_basic' => ['kullanici_adi', 'sifre'],
-    'headers' => [
-        'Username' => 'kullanici_adi',
-        'Password' => 'sifre',
-    ],
-]);
+$wsdl = 'https://servis.smartdonusum.com/InvoiceService/InvoiceWS?wsdl';
+$username = 'kullanici_adi';
+$password = 'sifre';
 
-// Custom engine oluştur
+// Stream context ile authentication
 $engine = DefaultEngineFactory::create(
     ExtSoapOptions::defaults($wsdl, [
         'stream_context' => stream_context_create([
             'http' => [
-                'header' => "Username: kullanici_adi\r\n" .
-                           "Password: sifre\r\n"
+                'header' => "Username: {$username}\r\n" .
+                           "Password: {$password}\r\n"
             ]
         ])
-    ])->withClassMap(SmartDonusumClassmap::getCollection())
+    ])->withClassMap(EInvoiceClassmap::getCollection())
 );
 
-$caller = new EventDispatchingCaller(new EngineCaller($engine), new EventDispatcher());
-$client = new SmartDonusumClient($caller);
+$eventDispatcher = new EventDispatcher();
+$caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+$client = new EInvoiceClient($caller);
 ```
 
 ## Kullanım Örnekleri
@@ -146,8 +160,8 @@ $client = new SmartDonusumClient($caller);
 UBL XML formatında oluşturulan faturaların entegratöre gönderilmesi:
 
 ```php
-use SmartDonusum\Type\SendInvoice;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EInvoice\Type\SendInvoice;
+use SmartDonusum\EInvoice\Type\InputDocument;
 
 $documents = [];
 
@@ -182,8 +196,8 @@ foreach ($responseList as $response) {
 Hatalı durumda olan faturaların güncellenmesi:
 
 ```php
-use SmartDonusum\Type\UpdateInvoice;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EInvoice\Type\UpdateInvoice;
+use SmartDonusum\EInvoice\Type\InputDocument;
 
 $inputDocument = new InputDocument(
     documentUUID: 'e8a5d8f0-1234-5678-90ab-cdef12345678', // Güncellenecek faturanın UUID'si
@@ -201,7 +215,7 @@ $response = $client->updateInvoice($request);
 #### Fatura İptali (cancelInvoice)
 
 ```php
-use SmartDonusum\Type\CancelInvoice;
+use SmartDonusum\EInvoice\Type\CancelInvoice;
 
 $request = new CancelInvoice(
     invoiceUUID: 'e8a5d8f0-1234-5678-90ab-cdef12345678'
@@ -221,7 +235,7 @@ if ($response->getCode() === '0') {
 #### Fatura Durumu ve Logları Sorgulama (getOutboxInvoiceStatusWithLogs)
 
 ```php
-use SmartDonusum\Type\GetOutboxInvoiceStatusWithLogs;
+use SmartDonusum\EInvoice\Type\GetOutboxInvoiceStatusWithLogs;
 
 $request = new GetOutboxInvoiceStatusWithLogs(
     documentUuid: 'e8a5d8f0-1234-5678-90ab-cdef12345678'
@@ -247,7 +261,7 @@ foreach ($logResponse->getInvoiceLogs() as $log) {
 #### Giden Fatura Sorgulama (queryOutboxDocument)
 
 ```php
-use SmartDonusum\Type\QueryOutboxDocument;
+use SmartDonusum\EInvoice\Type\QueryOutboxDocument;
 
 // UUID ile sorgulama
 $request = new QueryOutboxDocument(
@@ -284,7 +298,7 @@ foreach ($response->getDocuments() as $document) {
 #### Tarih Aralığında Giden Fatura Sorgulama
 
 ```php
-use SmartDonusum\Type\QueryOutboxDocumentWithDocumentDate;
+use SmartDonusum\EInvoice\Type\QueryOutboxDocumentWithDocumentDate;
 
 $request = new QueryOutboxDocumentWithDocumentDate(
     startDate: '2024-01-01',
@@ -301,7 +315,7 @@ $response = $client->queryOutboxDocumentWithDocumentDate($request);
 #### Gelen Fatura Sorgulama (queryInboxDocument)
 
 ```php
-use SmartDonusum\Type\QueryInboxDocument;
+use SmartDonusum\EInvoice\Type\QueryInboxDocument;
 
 $request = new QueryInboxDocument(
     paramType: 'Document_UUID',
@@ -322,7 +336,7 @@ foreach ($response->getDocuments() as $document) {
 #### Local ID ile Sorgulama
 
 ```php
-use SmartDonusum\Type\QueryOutboxDocumentWithLocalId;
+use SmartDonusum\EInvoice\Type\QueryOutboxDocumentWithLocalId;
 
 $request = new QueryOutboxDocumentWithLocalId(
     localId: 'LOCAL-ID-001'
@@ -334,7 +348,7 @@ $response = $client->queryOutboxDocumentWithLocalId($request);
 #### UUID Listesi ile Sorgulama
 
 ```php
-use SmartDonusum\Type\QueryOutboxDocumentsWithGUIDList;
+use SmartDonusum\EInvoice\Type\QueryOutboxDocumentsWithGUIDList;
 
 $uuidList = [
     'e8a5d8f0-1234-5678-90ab-cdef12345678',
@@ -352,7 +366,7 @@ $response = $client->queryOutboxDocumentsWithGUIDList($request);
 #### Arşivlenmiş Fatura Sorgulama (Önceki Yıllar)
 
 ```php
-use SmartDonusum\Type\QueryArchivedOutboxDocument;
+use SmartDonusum\EInvoice\Type\QueryArchivedOutboxDocument;
 
 $request = new QueryArchivedOutboxDocument(
     paramType: 'Document_UUID',
@@ -371,8 +385,8 @@ $response = $client->queryArchivedOutboxDocument($request);
 UBL XML formatındaki uygulama yanıtlarının (KABUL, RED, İADE) entegratöre gönderilmesi:
 
 ```php
-use SmartDonusum\Type\SendApplicationResponse;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EInvoice\Type\SendApplicationResponse;
+use SmartDonusum\EInvoice\Type\InputDocument;
 
 $appResponse = new InputDocument(
     documentUUID: 'yanit-uuid-buraya',
@@ -390,7 +404,7 @@ $response = $client->sendApplicationResponse($request);
 Gönderilen faturaya ait gelen uygulama yanıtlarını sorgulama:
 
 ```php
-use SmartDonusum\Type\QueryAppResponseOfOutboxDocument;
+use SmartDonusum\EInvoice\Type\QueryAppResponseOfOutboxDocument;
 
 $request = new QueryAppResponseOfOutboxDocument(
     documentUUID: 'fatura-uuid',
@@ -408,7 +422,7 @@ foreach ($response->getDocuments() as $appResponse) {
 Gelen faturaya ait gönderilen uygulama yanıtlarını sorgulama:
 
 ```php
-use SmartDonusum\Type\QueryAppResponseOfInboxDocument;
+use SmartDonusum\EInvoice\Type\QueryAppResponseOfInboxDocument;
 
 $request = new QueryAppResponseOfInboxDocument(
     documentUUID: 'fatura-uuid',
@@ -425,7 +439,7 @@ $response = $client->queryAppResponseOfInboxDocument($request);
 Fatura XML'ini şema ve şematron kontrollerinden geçirme:
 
 ```php
-use SmartDonusum\Type\ControlInvoiceXML;
+use SmartDonusum\EInvoice\Type\ControlInvoiceXML;
 
 $request = new ControlInvoiceXML(
     invoiceXML: $ubl_xml_content // Base64 encode'a gerek yok
@@ -444,7 +458,7 @@ if ($response->getCode() === '0') {
 #### Uygulama Yanıtı XML Kontrolü (controlApplicationResponseXML)
 
 ```php
-use SmartDonusum\Type\ControlApplicationResponseXML;
+use SmartDonusum\EInvoice\Type\ControlApplicationResponseXML;
 
 $request = new ControlApplicationResponseXML(
     applicationResponseXML: $uygulama_yaniti_xml
@@ -460,7 +474,7 @@ $response = $client->controlApplicationResponseXML($request);
 GİB'e kayıtlı e-fatura kullanıcılarını sorgulama:
 
 ```php
-use SmartDonusum\Type\QueryUsers;
+use SmartDonusum\EInvoice\Type\QueryUsers;
 
 $request = new QueryUsers(
     startDate: '2024-01-01', // Opsiyonel
@@ -481,7 +495,7 @@ foreach ($response->getUsers() as $user) {
 #### Gönderici Birim Etiketleri (getCustomerGBList)
 
 ```php
-use SmartDonusum\Type\GetCustomerGBList;
+use SmartDonusum\EInvoice\Type\GetCustomerGBList;
 
 $request = new GetCustomerGBList();
 $response = $client->getCustomerGBList($request);
@@ -494,7 +508,7 @@ foreach ($response->getLabels() as $label) {
 #### Posta Kutusu Etiketleri (getCustomerPKList)
 
 ```php
-use SmartDonusum\Type\GetCustomerPKList;
+use SmartDonusum\EInvoice\Type\GetCustomerPKList;
 
 $request = new GetCustomerPKList();
 $response = $client->getCustomerPKList($request);
@@ -503,7 +517,7 @@ $response = $client->getCustomerPKList($request);
 #### Kredi Bilgileri Sorgulama
 
 ```php
-use SmartDonusum\Type\GetCustomerCreditCount;
+use SmartDonusum\EInvoice\Type\GetCustomerCreditCount;
 
 $request = new GetCustomerCreditCount(
     vkn_tckn: '1234567890'
@@ -518,7 +532,7 @@ if ($creditInfo->getCode() === '0') {
 ```
 
 ```php
-use SmartDonusum\Type\GetCustomerCreditSpace;
+use SmartDonusum\EInvoice\Type\GetCustomerCreditSpace;
 
 $request = new GetCustomerCreditSpace(
     vkn_tckn: '1234567890'
@@ -535,7 +549,7 @@ if ($creditInfo->getCode() === '0') {
 #### Kredi Hareketleri (getCreditActionsforCustomer)
 
 ```php
-use SmartDonusum\Type\GetCreditActionsforCustomer;
+use SmartDonusum\EInvoice\Type\GetCreditActionsforCustomer;
 
 $request = new GetCreditActionsforCustomer(
     vkn_tckn: '1234567890'
@@ -556,8 +570,8 @@ foreach ($response->getCreditActions() as $action) {
 #### Belge Bayrağı Ayarlama (setDocumentFlag)
 
 ```php
-use SmartDonusum\Type\SetDocumentFlag;
-use SmartDonusum\Type\FlagSetter;
+use SmartDonusum\EInvoice\Type\SetDocumentFlag;
+use SmartDonusum\EInvoice\Type\FlagSetter;
 
 $flagSetter = new FlagSetter(
     document_direction: 'GIDEN', // GIDEN veya GELEN
@@ -575,7 +589,7 @@ $response = $client->setDocumentFlag($request);
 Gelen belgelerin lokale kaydedildiğini işaretleme:
 
 ```php
-use SmartDonusum\Type\SetTakenFromEntegrator;
+use SmartDonusum\EInvoice\Type\SetTakenFromEntegrator;
 
 $uuidList = [
     'uuid-1',
@@ -589,18 +603,34 @@ $response = $client->setTakenFromEntegrator($request);
 
 ### E-Arşiv Fatura İşlemleri
 
-E-Arşiv fatura servisleri için ayrı bir WSDL kullanılmalıdır:
+E-Arşiv fatura servisleri için ayrı bir client kullanılmalıdır:
 
 ```php
+use SmartDonusum\EArchive\EArchiveClient;
+use SmartDonusum\EArchive\EArchiveClassmap;
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+
 $wsdl = 'https://servis.smartdonusum.com/EArchiveInvoiceService/EArchiveInvoiceWS?wsdl';
-$client = SmartDonusumClientFactory::factory($wsdl);
+
+$engine = DefaultEngineFactory::create(
+    ExtSoapOptions::defaults($wsdl, [])
+        ->withClassMap(EArchiveClassmap::getCollection())
+);
+
+$eventDispatcher = new EventDispatcher();
+$caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+$client = new EArchiveClient($caller);
 ```
 
 #### E-Arşiv Fatura Gönderme
 
 ```php
-use SmartDonusum\Type\SendInvoice;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EArchive\Type\SendInvoice;
+use SmartDonusum\EArchive\Type\InputDocument;
 
 $inputDocument = new InputDocument(
     documentUUID: 'ea-uuid-buraya',
@@ -618,7 +648,7 @@ $response = $client->sendInvoice($request);
 #### E-Arşiv Fatura İptali
 
 ```php
-use SmartDonusum\Type\CancelInvoice;
+use SmartDonusum\EArchive\Type\CancelInvoice;
 
 $request = new CancelInvoice(
     invoiceUuid: 'ea-uuid',
@@ -634,7 +664,7 @@ $response = $client->cancelInvoice($request);
 Aynı seri numarasına sahip en son faturanın bilgilerini alma:
 
 ```php
-use SmartDonusum\Type\GetLastInvoiceIdAndDate;
+use SmartDonusum\EArchive\Type\GetLastInvoiceIdAndDate;
 
 $request = new GetLastInvoiceIdAndDate(
     source_id: '1234567890', // VKN/TCKN
@@ -650,7 +680,7 @@ echo "Düzenleme Tarihi: " . $response->getIssueDate() . "\n";
 #### E-Arşiv Fatura Sorgulama
 
 ```php
-use SmartDonusum\Type\QueryInvoice;
+use SmartDonusum\EArchive\Type\QueryInvoice;
 
 $request = new QueryInvoice(
     paramType: 'Document_UUID', // Document_UUID, Document_ID, Envelope_UUID
@@ -664,7 +694,7 @@ $response = $client->queryInvoice($request);
 #### E-posta Gönderildi İşaretleme (setEmailSent)
 
 ```php
-use SmartDonusum\Type\SetEmailSent;
+use SmartDonusum\EArchive\Type\SetEmailSent;
 
 $invoiceUuidList = [
     'ea-uuid-1',
@@ -678,7 +708,7 @@ $responseList = $client->setEmailSent($request);
 #### E-Fatura Kullanıcısı Kontrolü (isEFaturaUser)
 
 ```php
-use SmartDonusum\Type\IsEFaturaUser;
+use SmartDonusum\EArchive\Type\IsEFaturaUser;
 
 $request = new IsEFaturaUser(
     vkn_tckn: '1234567890'
@@ -696,14 +726,30 @@ if ($response->getCode() === '0') {
 ### E-Arşiv Rapor İşlemleri
 
 ```php
+use SmartDonusum\EArchive\EArchiveClient;
+use SmartDonusum\EArchive\EArchiveClassmap;
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+
 $wsdl = 'https://servis.smartdonusum.com/EArchiveReportService/EAReportWS?wsdl';
-$reportClient = SmartDonusumClientFactory::factory($wsdl);
+
+$engine = DefaultEngineFactory::create(
+    ExtSoapOptions::defaults($wsdl, [])
+        ->withClassMap(EArchiveClassmap::getCollection())
+);
+
+$eventDispatcher = new EventDispatcher();
+$caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+$reportClient = new EArchiveClient($caller);
 ```
 
 #### Otomatik Rapor Gönderim Günü Belirleme
 
 ```php
-use SmartDonusum\Type\SetReportAutoSendDay;
+use SmartDonusum\EArchive\Type\SetReportAutoSendDay;
 
 $request = new SetReportAutoSendDay(
     dayOfMonth: 15 // Ayın 1-15 arası bir günü
@@ -715,7 +761,7 @@ $response = $reportClient->setReportAutoSendDay($request);
 #### Rapor Gönderim İsteği Oluşturma
 
 ```php
-use SmartDonusum\Type\CreateReportSendRequest;
+use SmartDonusum\EArchive\Type\CreateReportSendRequest;
 
 $request = new CreateReportSendRequest(
     reportDate: '2024-01-01' // yyyy-MM-dd (en az bir önceki dönem)
@@ -727,8 +773,8 @@ $response = $reportClient->createReportSendRequest($request);
 #### Rapor XML Gönderme
 
 ```php
-use SmartDonusum\Type\SendReport;
-use SmartDonusum\Type\ReportRequest;
+use SmartDonusum\EArchive\Type\SendReport;
+use SmartDonusum\EArchive\Type\ReportRequest;
 
 $reportRequest = new ReportRequest(
     mukellef: '1234567890',
@@ -754,19 +800,38 @@ if ($reportResponse->getCode() === '0') {
 İmzalı faturaların saklanması için kullanılır:
 
 ```php
+use SmartDonusum\EInvoice\EInvoiceClient;
+use SmartDonusum\EInvoice\EInvoiceClassmap;
+// veya E-Arşiv için
+use SmartDonusum\EArchive\EArchiveClient;
+use SmartDonusum\EArchive\EArchiveClassmap;
+
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+
 // E-Fatura için
 $wsdl = 'https://servis.smartdonusum.com/InvoiceLoadingService/LoadInvoiceWS?wsdl';
 // E-Arşiv için
-$wsdl = 'https://servis.smartdonusum.com/EAInvoiceLoadingService/LoadInvoiceWS?wsdl';
+// $wsdl = 'https://servis.smartdonusum.com/EAInvoiceLoadingService/LoadInvoiceWS?wsdl';
 
-$loadClient = SmartDonusumClientFactory::factory($wsdl);
+$engine = DefaultEngineFactory::create(
+    ExtSoapOptions::defaults($wsdl, [])
+        ->withClassMap(EInvoiceClassmap::getCollection()) // veya EArchiveClassmap
+);
+
+$eventDispatcher = new EventDispatcher();
+$caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+$loadClient = new EInvoiceClient($caller); // veya EArchiveClient
 ```
 
 #### Giden Fatura Yükleme
 
 ```php
-use SmartDonusum\Type\LoadOutboxInvoice;
-use SmartDonusum\Type\InputDocument;
+use SmartDonusum\EInvoice\Type\LoadOutboxInvoice;
+use SmartDonusum\EInvoice\Type\InputDocument;
 
 $document = new InputDocument(
     documentUUID: 'signed-invoice-uuid',
@@ -780,7 +845,7 @@ $response = $loadClient->loadOutboxInvoice($request);
 #### Gelen Fatura Yükleme
 
 ```php
-use SmartDonusum\Type\LoadInboxInvoice;
+use SmartDonusum\EInvoice\Type\LoadInboxInvoice;
 
 $document = new InputDocument(
     documentUUID: 'inbox-invoice-uuid',
@@ -796,9 +861,15 @@ $response = $loadClient->loadInboxInvoice($request);
 ### Event Listener Ekleme
 
 ```php
+use SmartDonusum\EInvoice\EInvoiceClient;
+use SmartDonusum\EInvoice\EInvoiceClassmap;
 use Phpro\SoapClient\Event\RequestEvent;
 use Phpro\SoapClient\Event\ResponseEvent;
 use Symfony\Component\EventDispatcher\EventDispatcher;
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
 
 $eventDispatcher = new EventDispatcher();
 
@@ -817,9 +888,11 @@ $eventDispatcher->addListener(ResponseEvent::class, function (ResponseEvent $eve
 });
 
 // Custom engine ve caller ile client oluştur
+$wsdl = 'https://servis.smartdonusum.com/InvoiceService/InvoiceWS?wsdl';
+
 $engine = DefaultEngineFactory::create(
     ExtSoapOptions::defaults($wsdl, [])
-        ->withClassMap(SmartDonusumClassmap::getCollection())
+        ->withClassMap(EInvoiceClassmap::getCollection())
 );
 
 $caller = new EventDispatchingCaller(
@@ -827,7 +900,7 @@ $caller = new EventDispatchingCaller(
     $eventDispatcher
 );
 
-$client = new SmartDonusumClient($caller);
+$client = new EInvoiceClient($caller);
 ```
 
 ### Hata Yönetimi
@@ -855,6 +928,7 @@ try {
 ### Custom SOAP Options
 
 ```php
+use SmartDonusum\EInvoice\EInvoiceClassmap;
 use Soap\ExtSoapEngine\ExtSoapOptions;
 use Phpro\SoapClient\Soap\DefaultEngineFactory;
 
@@ -868,7 +942,7 @@ $options = ExtSoapOptions::defaults($wsdl, [
     'encoding' => 'UTF-8',
     'soap_version' => SOAP_1_1,
 ])
-->withClassMap(SmartDonusumClassmap::getCollection());
+->withClassMap(EInvoiceClassmap::getCollection());
 
 $engine = DefaultEngineFactory::create($options);
 ```
@@ -964,7 +1038,10 @@ $engine = DefaultEngineFactory::create($options);
 
 ## Veri Tipleri ve Sınıflar
 
-Tüm veri tipleri `SmartDonusum\Type` namespace'i altında bulunur ve immutable yapıdadır.
+Tüm veri tipleri ilgili namespace'ler altında bulunur ve immutable yapıdadır:
+
+- **E-Fatura**: `SmartDonusum\EInvoice\Type`
+- **E-Arşiv**: `SmartDonusum\EArchive\Type`
 
 ### InputDocument
 
@@ -1170,33 +1247,33 @@ foreach ($response as $entResponse) {
 Projede WSDL'den otomatik kod üretimi için yapılandırma mevcuttur. WSDL değişikliklerinde kodları yeniden üretmek için:
 
 ```bash
-# Tüm type sınıflarını oluştur
-vendor/bin/soap-client generate:types config/soap-client.php
+# E-Fatura için kod üretimi
+vendor/bin/soap-client generate:types --config=config/invoice-client.php
+vendor/bin/soap-client generate:client --config=config/invoice-client.php
+vendor/bin/soap-client generate:classmap --config=config/invoice-client.php
 
-# Client sınıfını oluştur
-vendor/bin/soap-client generate:client config/soap-client.php
+# E-Arşiv için kod üretimi
+vendor/bin/soap-client generate:types --config=config/earchive-client.php
+vendor/bin/soap-client generate:client --config=config/earchive-client.php
+vendor/bin/soap-client generate:classmap --config=config/earchive-client.php
 
-# Classmap'i oluştur
-vendor/bin/soap-client generate:classmap config/soap-client.php
+# Veya tüm kodları üretmek için
+./generate.sh
 ```
 
-### Farklı Servisler İçin Kod Üretimi
+### Config Dosyaları
 
-`config/soap-client.php` dosyasındaki WSDL adresini değiştirerek farklı servisler için kod üretebilirsiniz:
+**E-Fatura için** (`config/invoice-client.php`):
+- **WSDL**: `https://service.smartdonusum.com/InvoiceService/InvoiceWS?wsdl`
+- **Namespace**: `SmartDonusum\EInvoice`
+- **Client**: `EInvoiceClient`
+- **Classmap**: `EInvoiceClassmap`
 
-```php
-// E-Fatura için
-'https://servis.smartdonusum.com/InvoiceService/InvoiceWS?wsdl'
-
-// E-Arşiv Fatura için
-'https://servis.smartdonusum.com/EArchiveInvoiceService/EArchiveInvoiceWS?wsdl'
-
-// Sorgulama servisi için
-'https://servis.smartdonusum.com/QueryInvoiceService/QueryDocumentWS?wsdl'
-
-// E-Arşiv Rapor için
-'https://servis.smartdonusum.com/EArchiveReportService/EAReportWS?wsdl'
-```
+**E-Arşiv için** (`config/earchive-client.php`):
+- **WSDL**: `https://service.smartdonusum.com/EArchiveInvoiceService/EArchiveInvoiceWS?wsdl`
+- **Namespace**: `SmartDonusum\EArchive`
+- **Client**: `EArchiveClient`
+- **Classmap**: `EArchiveClassmap`
 
 ## Best Practices
 
@@ -1205,14 +1282,30 @@ vendor/bin/soap-client generate:classmap config/soap-client.php
 Her istek için yeni client oluşturmak yerine client'ı yeniden kullanın:
 
 ```php
+use SmartDonusum\EInvoice\EInvoiceClient;
+use SmartDonusum\EInvoice\EInvoiceClassmap;
+use Phpro\SoapClient\Soap\DefaultEngineFactory;
+use Soap\ExtSoapEngine\ExtSoapOptions;
+use Phpro\SoapClient\Caller\EventDispatchingCaller;
+use Phpro\SoapClient\Caller\EngineCaller;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+
 class InvoiceService
 {
-    private SmartDonusumClient $client;
+    private EInvoiceClient $client;
     
     public function __construct()
     {
         $wsdl = 'https://servis.smartdonusum.com/InvoiceService/InvoiceWS?wsdl';
-        $this->client = SmartDonusumClientFactory::factory($wsdl);
+        
+        $engine = DefaultEngineFactory::create(
+            ExtSoapOptions::defaults($wsdl, [])
+                ->withClassMap(EInvoiceClassmap::getCollection())
+        );
+        
+        $eventDispatcher = new EventDispatcher();
+        $caller = new EventDispatchingCaller(new EngineCaller($engine), $eventDispatcher);
+        $this->client = new EInvoiceClient($caller);
     }
     
     public function sendInvoice($xmlContent): array
